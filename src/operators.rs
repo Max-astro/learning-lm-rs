@@ -90,34 +90,6 @@ pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: 
         }
     }
 
-    // fn recv_apply(
-    //     shape: &[usize],
-    //     ndim: usize,
-    //     y: &mut [f32],
-    //     x: &[f32],
-    //     w: &[f32],
-    //     epsilon: f32,
-    //     offset: usize,
-    // ) {
-    //     let len = shape[ndim];
-    //     if ndim == shape.len() - 1 {
-    //         let offset = offset * len;
-    //         assert!(offset + len <= y.len());
-    //         last_dim_op(
-    //             &mut y[offset..offset + len],
-    //             &x[offset..offset + len],
-    //             w,
-    //             epsilon,
-    //         );
-    //     } else {
-    //         for i in 0..shape[ndim] {
-    //             recv_apply(shape, ndim + 1, y, x, w, epsilon, offset + i * len);
-    //         }
-    //     }
-    // }
-
-    // recv_apply(shape, 0, y, x, w, epsilon, 0);
-
     let y_data = unsafe { y.data_mut() };
     let x_data = x.data();
     let w_data = w.data();
@@ -156,7 +128,30 @@ pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
 // C = beta * C + alpha * A @ B^T
 // hint: You don't need to do an explicit transpose of B
 pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    assert!(a.shape().len() == 2);
+    assert!(b.shape().len() == 2);
+    assert!(c.shape().len() == 2);
+
+    assert!(a.shape()[1] == b.shape()[1]);
+    let (m, n, k) = (a.shape()[0], b.shape()[0], b.shape()[1]);
+
+    assert!(m == c.shape()[0]);
+    assert!(n == c.shape()[1]);
+
+    let c_data = unsafe { c.data_mut() };
+    let a_data = a.data();
+    let b_data = b.data();
+
+    for i in 0..m {
+        for j in 0..n {
+            let c_offset = i * n + j;
+            let mut c = beta * c_data[c_offset];
+            for l in 0..k {
+                c += alpha * a_data[i * k + l] * b_data[j * k + l]
+            }
+            c_data[c_offset] = c;
+        }
+    }
 }
 
 // Dot product of two tensors (treated as vectors)
