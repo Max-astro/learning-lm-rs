@@ -71,25 +71,79 @@ pub fn masked_softmax(y: &mut Tensor<f32>) {
 }
 
 pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
+    if y.shape().is_empty() {
+        return;
+    }
+
+    let len = y.size();
+    assert!(len == x.size());
+
+    let last_dim_len = y.shape()[y.shape().len() - 1];
+    assert!(last_dim_len == y.shape()[y.shape().len() - 1]);
+    assert!(last_dim_len == w.size());
+
+    fn last_dim_op(y: &mut [f32], x: &[f32], w: &[f32], epsilon: f32) {
+        let n = y.len();
+        let sigma_x = x.iter().map(|x| x * x).sum::<f32>() / n as f32;
+        for i in 0..n {
+            y[i] = w[i] * x[i] / (sigma_x + epsilon).sqrt();
+        }
+    }
+
+    // fn recv_apply(
+    //     shape: &[usize],
+    //     ndim: usize,
+    //     y: &mut [f32],
+    //     x: &[f32],
+    //     w: &[f32],
+    //     epsilon: f32,
+    //     offset: usize,
+    // ) {
+    //     let len = shape[ndim];
+    //     if ndim == shape.len() - 1 {
+    //         let offset = offset * len;
+    //         assert!(offset + len <= y.len());
+    //         last_dim_op(
+    //             &mut y[offset..offset + len],
+    //             &x[offset..offset + len],
+    //             w,
+    //             epsilon,
+    //         );
+    //     } else {
+    //         for i in 0..shape[ndim] {
+    //             recv_apply(shape, ndim + 1, y, x, w, epsilon, offset + i * len);
+    //         }
+    //     }
+    // }
+
+    // recv_apply(shape, 0, y, x, w, epsilon, 0);
+
+    let y_data = unsafe { y.data_mut() };
+    let x_data = x.data();
+    let w_data = w.data();
+    let mut offset = 0;
+    while offset < x_data.len() {
+        last_dim_op(
+            &mut y_data[offset..offset + last_dim_len],
+            &x_data[offset..offset + last_dim_len],
+            w_data,
+            epsilon,
+        );
+        offset += last_dim_len;
+    }
+
+    // todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
 }
 
 // y = silu(x) * y
 // hint: this is an element-wise operation
 pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
-    // let len = y.size();
-    // assert!(len == x.size());
+    let len = y.size();
+    assert!(len == x.size());
 
-    // let _y = unsafe { y.data_mut() };
-    // let _x = x.data();
+    let sigmoid = |x: f32| -> f32 { 1. / (1. + (-x).exp()) };
 
-    let sigmoid = |x: f32| -> f32 {
-        1. / (1. + (-x).exp())
-    };
-
-    let silu = |x: f32| -> f32 {
-        x * sigmoid(x)
-    };
+    let silu = |x: f32| -> f32 { x * sigmoid(x) };
 
     let y_mut = unsafe { y.data_mut() };
     let x_data = x.data();
@@ -97,8 +151,6 @@ pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
     y_mut.iter_mut().zip(x_data).for_each(|(y, x)| {
         *y *= silu(*x);
     });
-
-    // todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
 }
 
 // C = beta * C + alpha * A @ B^T
