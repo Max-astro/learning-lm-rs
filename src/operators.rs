@@ -168,6 +168,21 @@ pub fn dot(x: &Tensor<f32>, y: &Tensor<f32>) -> f32 {
     sum
 }
 
+pub fn element_wise_op<F>(x: &mut Tensor<f32>, y: &Tensor<f32>, bin_op: F)
+where
+    F: Fn(f32, f32) -> f32,
+{
+    assert!(x.size() == y.size());
+    assert!(x.shape() == y.shape());
+
+    let x_data = unsafe { x.data_mut() };
+    let y_data = y.data();
+    x_data
+        .iter_mut()
+        .zip(y_data)
+        .for_each(|(x, y)| *x = bin_op(*x, *y));
+}
+
 // Sample a index from a tensor (treated as a probability vector)
 pub fn random_sample(x: &Tensor<f32>, top_p: f32, top_k: u32, temperature: f32) -> u32 {
     assert!(x.shape()[x.shape().len() - 1] == x.size());
