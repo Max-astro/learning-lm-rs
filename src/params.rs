@@ -22,14 +22,63 @@ pub struct LLamaParams<T> {
 
 impl LLamaParams<f32> {
     pub fn from_safetensors(safetensor: &SafeTensors, config: &LlamaConfigJson) -> Self {
-        todo!("实现从safetensors文件的模型参数加载");
-        // let get_tensor: impl Fn(&str) -> Tensor<f32> = |name: &str| {
-        // ...    
-        // };
-        
-        // LLamaParams {
-        //     embedding_table: get_tensor(...),
-        //     ...
+        // for tensor_name in safetensor.names() {
+        //     println!("Tensor name: {}", tensor_name);
         // }
+
+        use safetensors::tensor::Dtype;
+        let get_tensor = |name: &str| {
+            let view = safetensor.tensor(name).unwrap();
+            assert_eq!(view.dtype(), Dtype::F32);
+
+            // Cast bytes to f32 vec
+            let data = unsafe {
+                let data = view.data().to_vec();
+                let ptr = data.as_ptr() as *const f32;
+                let len = data.len() / std::mem::size_of::<f32>();
+                std::mem::forget(data);
+                Vec::from_raw_parts(ptr as *mut f32, len, len)
+            };
+
+            Tensor::<f32>::new(data, &view.shape().to_vec())
+        };
+
+        let layers = config.num_hidden_layers;
+        LLamaParams {
+            embedding_table: get_tensor("lm_head.weight"),
+            rms_att_w: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.input_layernorm.weight", i).as_str()))
+                .collect(),
+            wq: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.self_attn.q_proj.weight", i).as_str()))
+                .collect(),
+            wk: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.self_attn.k_proj.weight", i).as_str()))
+                .collect(),
+            wv: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.self_attn.v_proj.weight", i).as_str()))
+                .collect(),
+            wo: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.self_attn.o_proj.weight", i).as_str()))
+                .collect(),
+            rms_ffn_w: (0..layers)
+                .map(|i| {
+                    get_tensor(
+                        format!("model.layers.{}.post_attention_layernorm.weight", i).as_str(),
+                    )
+                })
+                .collect(),
+            w_up: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.mlp.up_proj.weight", i).as_str()))
+                .collect(),
+            w_gate: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.mlp.gate_proj.weight", i).as_str()))
+                .collect(),
+            w_down: (0..layers)
+                .map(|i| get_tensor(format!("model.layers.{}.mlp.down_proj.weight", i).as_str()))
+                .collect(),
+            rms_out_w: get_tensor("model.norm.weight"),
+            lm_head: get_tensor("lm_head.weight"),
+        }
     }
 }
